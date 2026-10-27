@@ -1,0 +1,2642 @@
+{
+  "name": "School Notice & SMS Automation System",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Happy Dashain SMS (TextBee) - SAFETY-FIRST\n**Safe defaults:** `dryRun = true`, `maxRecipientsPerRun = 1`; no live SMS in dry-run.\nPolls every minute in `Asia/Kathmandu`. TextBee acceptance/queue is NOT delivery confirmation. Timeouts and ambiguous responses are marked `unknown` and must not be auto-retried.\n**Important:** Google Sheets is not an atomic lock/unique-key store. Keep n8n concurrency at 1 for this workflow; for stronger multi-worker guarantees use PostgreSQL unique keys/transactions. This existing 38-node workflow still uses the existing configured `campaignId` and existing Campaigns schema; see accompanying instructions for the remaining configuration limitations.",
+        "height": 300,
+        "width": 640,
+        "color": 4
+      },
+      "id": "e3e4a241-6911-4844-b6fc-d84a17a10c4a",
+      "name": "Note - Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Configure here\nSet the spreadsheet ID, tab names, campaignId, TextBee device ID, and safety switches in Workflow Config. Store the TextBee API key in the Header Auth credential using header `x-api-key`; Google access uses the Service Account credential. Replace placeholders before testing.",
+        "height": 200,
+        "width": 420,
+        "color": 7
+      },
+      "id": "a379aa2d-369a-4a34-8bd7-2e83444c3d0c",
+      "name": "Note - Config",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        304,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Safety gates\nRequires `status = approved`, `approved_by`, valid send_date/send_time, inside expiry/grace window, valid message and live-mode config. Writes `processing` before the HTTP request. A campaign stuck `running` or a recipient stuck `processing`/`unknown` requires manual review; do not blindly reset/retry.",
+        "height": 200,
+        "width": 460,
+        "color": 3
+      },
+      "id": "66e95876-81f9-465c-85a3-72c9aa27b110",
+      "name": "Note - Safety",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Send loop (one recipient per request)\nRe-reads and validates each contact; writes `processing` before TextBee; records `accepted` / `failed` / `unknown`. No automatic retries. `accepted` means API accepted/queued, not delivered. The Sheets-based lock is not atomic; enforce single workflow concurrency or use PostgreSQL for stronger guarantees.",
+        "height": 180,
+        "width": 760,
+        "color": 6
+      },
+      "id": "9a3180ea-e437-4b7e-b4d8-40011d9fec84",
+      "name": "Note - Send loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2752,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "* * * * *"
+            }
+          ]
+        }
+      },
+      "id": "df948740-7f65-40d3-8395-7a0871f6f629",
+      "name": "Schedule Trigger (every minute)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -64,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0ba94fe1-00c3-4118-b1f9-e28266e15135",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e061f477-5581-5abe-b9b1-bc91bb05e9ff",
+              "name": "sheetDocumentId",
+              "value": "1Mqma48DNnC450MkJlYG33ec3R3KF1mK-Ljrd_sLwcIE",
+              "type": "string"
+            },
+            {
+              "id": "5d665bd9-51d0-5498-94d3-ce4ccfd55e0f",
+              "name": "contactsSheetName",
+              "value": "Contacts",
+              "type": "string"
+            },
+            {
+              "id": "4d34b68a-24aa-5a0b-8f31-398fddccc83e",
+              "name": "campaignsSheetName",
+              "value": "Campaigns",
+              "type": "string"
+            },
+            {
+              "id": "29ce96f7-7660-5874-9567-a8f5ae476fe2",
+              "name": "runLogSheetName",
+              "value": "RunLog",
+              "type": "string"
+            },
+            {
+              "id": "52f65006-2a4c-59d8-91ac-df9f236fbd35",
+              "name": "campaignId",
+              "value": "DASHAIN-TEST-01",
+              "type": "string"
+            },
+            {
+              "id": "a0af0d6d-4619-5ffc-913c-7a13b720c15d",
+              "name": "dryRun",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "20694c91-8b83-578d-86c8-589c4aa1476f",
+              "name": "bypassTimeGateInDryRun",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "cdb83ff2-f24c-546b-85ba-fad0d9b98efa",
+              "name": "maxRecipientsPerRun",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "5bb4977a-6afe-55ff-b02b-64aa4fc57fa7",
+              "name": "pauseBetweenSendsSeconds",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "03babf39-719a-53cb-af3a-8adfcdac3dd2",
+              "name": "sendWindowGraceMinutes",
+              "value": 360,
+              "type": "number"
+            },
+            {
+              "id": "813de396-2cac-5adc-8ca1-da835670d17a",
+              "name": "staleLockMinutes",
+              "value": 90,
+              "type": "number"
+            },
+            {
+              "id": "1d0636a9-c018-5696-be92-6b7799f430de",
+              "name": "maxSmsSegments",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "22911a5f-c8fb-5059-83c1-923e9863abc2",
+              "name": "timezone",
+              "value": "Asia/Kathmandu",
+              "type": "string"
+            },
+            {
+              "id": "145a4d2c-6f94-5328-8a6b-43eefe275b75",
+              "name": "textbeeBaseUrl",
+              "value": "https://api.textbee.dev/api/v1",
+              "type": "string"
+            },
+            {
+              "id": "2c3cbe0e-913d-5b81-bccb-d1043b71880d",
+              "name": "textbeeDeviceId",
+              "value": "6ad19d8b74e21da91af5e509",
+              "type": "string"
+            },
+            {
+              "id": "910c4d0d-ca4e-5ac0-a6fe-402ae0b065a7",
+              "name": "textbeeSimSubscriptionId",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "fcf9b564-1cb5-597c-8ef0-51480723f56d",
+              "name": "allowedRecipientTypes",
+              "value": "parent,teacher,student",
+              "type": "string"
+            },
+            {
+              "id": "c1f79152-4710-5ef7-a849-95473f901072",
+              "name": "normalizeLocalNepalNumbers",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2e4cf257-70d4-4339-a15a-d1c2230e089b",
+      "name": "Workflow Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        176,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Mqma48DNnC450MkJlYG33ec3R3KF1mK-Ljrd_sLwcIE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Campaigns",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "0efdfebe-b8f2-41c9-912c-f2ac3aa543d5",
+      "name": "Read Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        416,
+        320
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// CAMPAIGN GATE  (Code node, \"Run Once for All Items\")\n// Fail-closed: the run proceeds ONLY if every check below passes.\n// Quiet blocks (draft/completed/before send time...) end silently.\n// \"Attention\" blocks flag the campaign row and raise an execution error (-> error workflow e-mail).\n\nconst cfg = $('Workflow Config').first().json;\nconst tz = String(cfg.timezone || 'Asia/Kathmandu');\nconst now = DateTime.now().setZone(tz);\nconst runId = `${now.toFormat(\"yyyyLLdd'T'HHmmss\")}-${$execution.id ?? 'x'}`;\nconst dryRun = cfg.dryRun !== false; // anything other than an explicit boolean false = dry run\n\nconst base = {\n  proceed: false, reason: '', needsAttention: false, flagStatus: '', flagNote: '',\n  campaignId: String(cfg.campaignId || '').trim(), dryRun, runId, nowIso: now.toISO(),\n};\nconst quiet = (reason, extra = {}) => [{ json: { ...base, reason, ...extra } }];\nconst alert = (reason, flagStatus, note) =>\n  [{ json: { ...base, reason, needsAttention: true, flagStatus: flagStatus || '', flagNote: String(note || reason).slice(0, 300) } }];\n\nconst nonEmpty = (r) => r && Object.values(r).some((v) => String(v ?? '').trim() !== '');\nconst rows = $input.all().map((i) => i.json).filter(nonEmpty);\nconst str = (v) => String(v ?? '').trim();\nconst isPlaceholder = (v) => str(v) === '' || /^REPLACE/i.test(str(v));\n\n// ---------- 0. workflow configuration sanity ----------\nif (!base.campaignId || isPlaceholder(base.campaignId)) {\n  return alert('config_campaign_id_not_set', '', 'campaignId is not configured in the Workflow Config node');\n}\n\n// ---------- 1. campaign row ----------\nif (rows.length === 0) return alert('campaign_row_not_found', '', 'No row in the Campaigns sheet matches the configured campaign_id');\nif (rows.length > 1) return alert('multiple_campaign_rows', 'paused', 'More than one Campaigns row has this campaign_id');\nconst c = rows[0];\nconst status = str(c.approval_status || c.status || c.campaign_status).toLowerCase();\n\n// ---------- 2. status guard ----------\nif (status === 'running') {\n  const staleMin = Number(cfg.staleLockMinutes ?? 90);\n  const last = DateTime.fromISO(str(c.last_run_at), { setZone: true });\n  if (last.isValid && now.diff(last, 'minutes').minutes > staleMin) {\n    return alert('stale_running_lock', 'paused',\n      `Campaign has been 'running' for more than ${staleMin} min (last_run_at ${last.toISO()}). A previous run may have crashed or n8n restarted. Review rows with status processing/unknown BEFORE re-approving.`);\n  }\n  return quiet('campaign_status_running');\n}\nconst QUIET = ['', 'draft', 'completed', 'disabled', 'paused', 'expired'];\nif (QUIET.includes(status)) return quiet(`campaign_status_${status || 'blank'}`);\nif (status !== 'approved') {\n  return alert('campaign_status_unrecognised', 'paused',\n    `Unrecognised campaign status \"${status.slice(0, 30)}\". Allowed: draft, approved, running, completed, disabled, paused, expired.`);\n}\nif (String(c.active ?? 'true').toLowerCase() === 'false' || ['no','0','inactive'].includes(str(c.active).toLowerCase())) return quiet('campaign_inactive');\nif (!str(c.approved_by)) return alert('approved_by_missing', 'paused', 'Status is approved but approved_by is empty.');\n\n// ---------- 3. send date / time (Asia/Kathmandu) ----------\nconst toDateStr = (v) => {\n  if (typeof v === 'number' && isFinite(v)) { // Google Sheets serial date\n    return DateTime.fromMillis(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000, { zone: 'utc' }).toFormat('yyyy-LL-dd');\n  }\n  return str(v);\n};\nconst toTimeStr = (v) => {\n  if (typeof v === 'number' && isFinite(v)) { // fraction of a day\n    const mins = Math.round(v * 1440);\n    return String(Math.floor(mins / 60) % 24).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');\n  }\n  const m = str(v).match(/^(\\d{1,2}):(\\d{2})(?::\\d{2})?$/);\n  return m ? m[1].padStart(2, '0') + ':' + m[2] : str(v);\n};\nconst sendDate = toDateStr(c.scheduled_date || c.send_date);\nconst sendTime = toTimeStr(c.scheduled_time || c.send_time);\nconst sendAt = DateTime.fromFormat(`${sendDate} ${sendTime}`, 'yyyy-LL-dd HH:mm', { zone: tz });\nif (!/^\\d{4}-\\d{2}-\\d{2}$/.test(sendDate) || !/^\\d{2}:\\d{2}$/.test(sendTime) || !sendAt.isValid) {\n  return alert('invalid_send_datetime', 'paused', 'send_date must be yyyy-mm-dd and send_time HH:mm (24-hour, Asia/Kathmandu).');\n}\n\n// ---------- 4. live-mode configuration ----------\nif (!dryRun) {\n  if (isPlaceholder(cfg.textbeeDeviceId)) {\n    return alert('config_textbee_device_id_not_set', 'paused', 'textbeeDeviceId is not configured (live mode requires a pinned TextBee device).');\n  }\n  const baseUrl = str(cfg.textbeeBaseUrl);\n  if (!/^https:\\/\\/[^\\s/]+(\\/[^\\s]*)?$/.test(baseUrl) || baseUrl.endsWith('/')) {\n    return alert('config_textbee_base_url_invalid', 'paused', 'textbeeBaseUrl must start with https:// and have no trailing slash.');\n  }\n  const sim = str(cfg.textbeeSimSubscriptionId);\n  if (sim !== '' && !/^\\d+$/.test(sim)) {\n    return alert('config_sim_subscription_id_invalid', 'paused', 'textbeeSimSubscriptionId must be blank or a whole number.');\n  }\n}\n\n// ---------- 5. message build + validation ----------\nconst TEMPLATES = {\n  'ne-latn': 'Happy Dashain! {school_name} ko tarfa bata sabai abhibhawak, vidyarthi ra shikshakharuma Bada Dashain ko hardik mangalmaya shubhakamana. Chutti: {holiday_start} dekhi {holiday_end} samma. School {reopen_date} dekhi khulchha. Dhanyabad, {school_name}.',\n  'en': 'Happy Dashain! On behalf of {school_name}, warm Bada Dashain wishes to all parents, students and teachers. Holiday: {holiday_start} to {holiday_end}. School reopens on {reopen_date}. Thank you, {school_name}.',\n  'ne-deva': 'शुभ दशैं! {school_name} तर्फबाट सबै अभिभावक, विद्यार्थी र शिक्षकलाई बडा दशैंको हार्दिक शुभकामना। बिदा: {holiday_start} देखि {holiday_end}। विद्यालय {reopen_date} मा खुल्छ। धन्यवाद।',\n};\nconst LANG = {\n  'en': 'en', 'english': 'en',\n  'ne-latn': 'ne-latn', 'roman nepali': 'ne-latn', 'romanized nepali': 'ne-latn', 'roman_nepali': 'ne-latn',\n  'ne-deva': 'ne-deva', 'nepali': 'ne-deva', 'devanagari': 'ne-deva',\n};\nconst lang = LANG[str(c.message_language || 'ne-latn').toLowerCase()];\nif (!lang) return alert('message_language_invalid', 'paused', 'message_language must be one of: ne-latn, en, ne-deva.');\n\nconst fmtField = (v) => {\n  if (typeof v === 'number' && isFinite(v) && v > 20000) { // looks like a Sheets serial date\n    return DateTime.fromMillis(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000, { zone: 'utc' }).toFormat('d LLL yyyy');\n  }\n  return str(v);\n};\nconst vars = {\n  school_name: fmtField(c.school_name), holiday_start: fmtField(c.holiday_start),\n  holiday_end: fmtField(c.holiday_end), reopen_date: fmtField(c.reopen_date),\n};\nlet template = str(c.message) || str(c.message_template_override) || TEMPLATES[lang];\nconst used = [...template.matchAll(/\\{([a-z_]+)\\}/g)].map((m) => m[1]);\nfor (const name of used) {\n  if (!(name in vars)) return alert('message_unknown_placeholder', 'paused', `Template uses unknown placeholder {${name}}. Allowed: school_name, holiday_start, holiday_end, reopen_date.`);\n  if (!vars[name]) return alert('message_field_missing', 'paused', `Campaigns column \"${name}\" is empty but the message template needs it.`);\n}\nlet message = template.replace(/\\{([a-z_]+)\\}/g, (_, k) => vars[k]);\n// normalise whitespace / control characters\nmessage = message.replace(/[\\u0000-\\u0009\\u000B-\\u001F\\u007F]/g, ' ').replace(/[ \\t]+/g, ' ').trim();\nif (lang !== 'ne-deva') { // keep Latin messages GSM-7 friendly (smart quotes etc. would force UCS-2)\n  message = message.replace(/[\\u2018\\u2019\\u201B]/g, \"'\").replace(/[\\u201C\\u201D]/g, '\"')\n    .replace(/[\\u2013\\u2014]/g, '-').replace(/\\u2026/g, '...').replace(/\\u00A0/g, ' ');\n}\nif (!message) return alert('message_empty', 'paused', 'Message is empty after template substitution.');\n\n// GSM 03.38 (basic + extension table) length / UCS-2 fallback\nconst GSM_BASIC = new Set(Array.from(\"@£$¥èéùìòÇ\\nØø\\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\\\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà\"));\nconst GSM_EXT = new Set(Array.from('\\f^{}\\\\[~]|€'));\nlet septets = 0; let isGsm = true;\nfor (const ch of Array.from(message)) {\n  if (GSM_BASIC.has(ch)) septets += 1; else if (GSM_EXT.has(ch)) septets += 2; else { isGsm = false; break; }\n}\nconst encoding = isGsm ? 'GSM-7' : 'UCS-2';\nconst length = isGsm ? septets : message.length; // UCS-2 length = UTF-16 code units\nconst segments = isGsm ? (length <= 160 ? 1 : Math.ceil(length / 153)) : (length <= 70 ? 1 : Math.ceil(length / 67));\nconst maxSeg = Number(cfg.maxSmsSegments ?? 3);\nif (segments > maxSeg) {\n  return alert('message_too_long', 'paused',\n    `Message needs ${segments} SMS segments (${encoding}, ${length} units); limit is ${maxSeg}. Shorten it or raise maxSmsSegments (carrier charges per segment).`);\n}\n\n// ---------- 6. send window ----------\nconst grace = Number(cfg.sendWindowGraceMinutes ?? 360);\nconst windowEnd = sendAt.plus({ minutes: grace });\nconst bypass = dryRun && cfg.bypassTimeGateInDryRun === true; // bypass is ONLY honoured in dry-run\nconst timing = { sendAtIso: sendAt.toISO(), windowEndIso: windowEnd.toISO() };\nif (!bypass) {\n  if (now < sendAt) return quiet('before_send_time', timing);\n  if (now > windowEnd) {\n    return alert('window_expired', 'expired',\n      `Send window ended ${windowEnd.toISO()} before the campaign completed. Review the Contacts sheet; if still appropriate, set a new send_date/send_time and re-approve.`);\n  }\n}\n\nreturn [{ json: {\n  ...base, proceed: true, reason: bypass ? 'dry_run_time_gate_bypassed' : 'ok',\n  ...timing, message, messageEncoding: encoding, messageLength: length, messageSegments: segments, messageLanguage: lang,\n} }];\n"
+      },
+      "id": "5504a271-87d0-4bd0-bc9e-6ec7b9f896ae",
+      "name": "Campaign Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "942adb70-7384-5a47-9ea2-e8a663f43de8",
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c390e31-2018-4f6b-9d1f-8ab2265c72ac",
+      "name": "Gate Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d511e1c2-c40a-5d67-b4db-ea5e79109f96",
+              "leftValue": "={{ $json.needsAttention }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "579e73a5-2fd9-4228-9678-1378f49448f2",
+      "name": "Needs Attention?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1136,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.campaignsSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "campaign_id": "={{ $json.campaignId }}",
+            "status": "={{ $json.flagStatus || 'paused' }}",
+            "status_note": "={{ $json.flagNote }}",
+            "last_run_at": "={{ $now.setZone(\"Asia/Kathmandu\").toFormat(\"yyyy-LL-dd'T'HH:mm:ssZZ\") }}"
+          },
+          "matchingColumns": [
+            "campaign_id"
+          ],
+          "schema": [
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true,
+              "removed": false
+            },
+            {
+              "id": "campaign_name",
+              "displayName": "campaign_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "approved_by",
+              "displayName": "approved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_date",
+              "displayName": "send_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_time",
+              "displayName": "send_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "school_name",
+              "displayName": "school_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "holiday_start",
+              "displayName": "holiday_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "holiday_end",
+              "displayName": "holiday_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "reopen_date",
+              "displayName": "reopen_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_language",
+              "displayName": "message_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_template_override",
+              "displayName": "message_template_override",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "last_run_id",
+              "displayName": "last_run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "last_run_at",
+              "displayName": "last_run_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "status_note",
+              "displayName": "status_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "02b096f9-d333-4668-b3ad-461bb54c89a7",
+      "name": "Flag Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1376,
+        416
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ 'Campaign gate alert [' + $('Campaign Gate').first().json.reason + ']: ' + $('Campaign Gate').first().json.flagNote }}"
+      },
+      "id": "db2c597b-f93b-4097-9961-72bac002476c",
+      "name": "Stop and Error - Gate Alert",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        416
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "73b73168-fcad-4e98-bf46-2a49ef38afbf",
+      "name": "Gate Closed - nothing to do",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.campaignsSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "campaign_id": "={{ $json.campaignId }}",
+            "status": "={{ $json.dryRun ? 'approved' : 'running' }}",
+            "status_note": "={{ $json.dryRun ? 'Dry run started (no SMS will be sent)' : 'Run in progress' }}",
+            "last_run_id": "={{ $json.runId }}",
+            "last_run_at": "={{ $now.setZone(\"Asia/Kathmandu\").toFormat(\"yyyy-LL-dd'T'HH:mm:ssZZ\") }}"
+          },
+          "matchingColumns": [
+            "campaign_id"
+          ],
+          "schema": [
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true,
+              "removed": false
+            },
+            {
+              "id": "campaign_name",
+              "displayName": "campaign_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "approved_by",
+              "displayName": "approved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_date",
+              "displayName": "send_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_time",
+              "displayName": "send_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "school_name",
+              "displayName": "school_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "holiday_start",
+              "displayName": "holiday_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "holiday_end",
+              "displayName": "holiday_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "reopen_date",
+              "displayName": "reopen_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_language",
+              "displayName": "message_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_template_override",
+              "displayName": "message_template_override",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "last_run_id",
+              "displayName": "last_run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "last_run_at",
+              "displayName": "last_run_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "status_note",
+              "displayName": "status_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "db174256-25d1-41df-b5a4-7d6dd6bdbcec",
+      "name": "Lock Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1136,
+        224
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.campaignsSheetName }}",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "campaign_id",
+              "lookupValue": "={{ $('Workflow Config').first().json.campaignId }}"
+            }
+          ]
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "FORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "id": "b2ee9b22-567e-4f6f-bc70-54376acb4879",
+      "name": "Verify Lock",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1376,
+        224
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Mqma48DNnC450MkJlYG33ec3R3KF1mK-Ljrd_sLwcIE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Contacts",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "campaign_id",
+              "lookupValue": "DASHAIN-TEST-01"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a0936825-e514-464a-a5d1-af2e021e71bb",
+      "name": "Read Contacts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1616,
+        224
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst cfg = $('Workflow Config').first().json;\nconst gate = $('Campaign Gate').first().json;\nconst lock = $('Verify Lock').first().json;\n\nconst campaignId = gate.campaignId;\nconst dryRun = gate.dryRun;\n\nif (String(lock.last_run_id ?? '') !== gate.runId) {\n  throw new Error('Campaign lock mismatch. Aborting.');\n}\nif (!dryRun && String(lock.status ?? '').toLowerCase() !== 'running') {\n  throw new Error('Campaign status is not running. Aborting.');\n}\n\nconst str = v => String(v ?? '').trim();\nconst nonEmpty = r => r && Object.values(r).some(v => str(v) !== '');\nconst rows = $input.all().map(i => i.json).filter(nonEmpty);\n\nif (!rows.length) {\n  throw new Error('No Contacts rows received.');\n}\n\nconst allowedTypes = str(cfg.allowedRecipientTypes || 'parent,teacher,student')\n  .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);\n\nconst OPT_OUT = ['no','n','false','opt-out','optout','opt_out','opted-out','opted_out','unsubscribe','unsubscribed','stop','revoked','withdrawn'];\n\nfunction normalizePhone(raw) {\n  const s = str(raw);\n  if (!s || !/^[+\\d\\s().-]+$/.test(s) || (s.indexOf('+') > 0)) {\n    return { ok: false, code: 'phone_invalid' };\n  }\n  let digits = s.replace(/\\D/g, '');\n  let intl = s.startsWith('+');\n  if (!intl && digits.startsWith('00')) {\n    digits = digits.slice(2);\n    intl = true;\n  }\n  if (!intl) {\n    if (/^977\\d{10}$/.test(digits)) intl = true;\n    else if (cfg.normalizeLocalNepalNumbers !== false && /^9[678]\\d{8}$/.test(digits)) {\n      digits = '977' + digits;\n      intl = true;\n    } else return { ok: false, code: 'phone_country_code_missing' };\n  }\n  if (!/^[1-9]\\d{7,14}$/.test(digits)) return { ok: false, code: 'phone_invalid_length' };\n  if (digits.startsWith('977') && !/^9[678]\\d{8}$/.test(digits.slice(3))) {\n    return { ok: false, code: 'phone_nepal_not_mobile' };\n  }\n  return { ok: true, e164: '+' + digits };\n}\n\nconst mask = e => e.slice(0,4) + '*'.repeat(Math.max(0,e.length-8)) + e.slice(-4);\n\nconst counts = {\n  rows_read: rows.length, missing_contact_id: 0, already_processed: 0,\n  skipped_total: 0, skipped: {}, eligible_total: 0,\n  to_send_this_run: 0, deferred: 0\n};\n\nconst keyCount = {};\nfor (const r of rows) {\n  const id = str(r.contact_id);\n  if (!id) continue;\n  const k = `${campaignId}|${id}`;\n  keyCount[k] = (keyCount[k] || 0) + 1;\n}\nif (Object.values(keyCount).some(n => n > 1)) {\n  throw new Error('Duplicate contact_id rows detected. Fix Contacts sheet first.');\n}\n\nconst HANDLED = ['processing','accepted','delivered','unknown'];\nconst handledPhones = new Set();\n\nfor (const r of rows) {\n  if (HANDLED.includes(str(r.send_status).toLowerCase())) {\n    const p = normalizePhone(r.phone);\n    if (p.ok) handledPhones.add(p.e164);\n  }\n}\n\nconst sends = [];\nconst skips = [];\nconst alreadyProcessedRows = [];\nconst seenPhones = new Set();\n\nfunction skip(r, reason) {\n  counts.skipped[reason] = (counts.skipped[reason] || 0) + 1;\n  counts.skipped_total++;\n  skips.push({\n    action: 'skip',\n    row_number: r.row_number,\n    contact_id: str(r.contact_id),\n    campaign_id: campaignId,\n    send_status: 'skipped',\n    error_message: reason\n  });\n}\n\nfor (const r of rows) {\n  const id = str(r.contact_id);\n  if (!id) {\n    counts.missing_contact_id++;\n    continue;\n  }\n\n  const st = str(r.send_status).toLowerCase();\n\n  if (st !== '' && st !== 'pending') {\n    counts.already_processed++;\n    alreadyProcessedRows.push({\n      row_number: r.row_number,\n      contact_id: id,\n      send_status: st,\n      has_provider_message_id: Boolean(str(r.provider_message_id)),\n      has_sent_at: Boolean(str(r.sent_at)),\n      error_message: str(r.error_message)\n    });\n    continue;\n  }\n\n  const consent = str(r.consent).toLowerCase();\n  if (consent !== 'yes') {\n    skip(r, OPT_OUT.includes(consent) ? 'opted_out' : 'consent_not_yes');\n    continue;\n  }\n\n  if (!allowedTypes.includes(str(r.recipient_type).toLowerCase())) {\n    skip(r, 'invalid_recipient_type');\n    continue;\n  }\n\n  const p = normalizePhone(r.phone);\n  if (!p.ok) {\n    skip(r, p.code);\n    continue;\n  }\n\n  if (handledPhones.has(p.e164) || seenPhones.has(p.e164)) {\n    skip(r, 'duplicate_phone');\n    continue;\n  }\n\n  seenPhones.add(p.e164);\n  sends.push({\n    row_number: r.row_number,\n    contact_id: id,\n    phone: p.e164,\n    recipient_type: str(r.recipient_type).toLowerCase()\n  });\n}\n\ncounts.eligible_total = sends.length;\nconst cap = Math.max(0, Math.floor(Number(cfg.maxRecipientsPerRun ?? 1)));\nconst batch = sends.slice(0, cap);\ncounts.to_send_this_run = batch.length;\ncounts.deferred = sends.length - batch.length;\n\nconst out = [];\nfor (const s of skips) {\n  out.push({ json: {\n    ...s, planCounts: counts, alreadyProcessedRows,\n    runId: gate.runId, dryRun\n  }});\n}\n\nfor (const s of batch) {\n  const requestBody = { recipients: [s.phone], message: gate.message };\n  const deviceId = str(cfg.textbeeDeviceId);\n\n  if (deviceId && !/^REPLACE/i.test(deviceId)) {\n    requestBody.deviceId = deviceId;\n  }\n\n  const simId = str(cfg.textbeeSimSubscriptionId);\n  if (simId !== '' && Number.isFinite(Number(simId))) {\n    requestBody.simSubscriptionId = Number(simId);\n  }\n\n  out.push({ json: {\n    action: 'send',\n    row_number: s.row_number,\n    contact_id: s.contact_id,\n    campaign_id: campaignId,\n    recipient_type: s.recipient_type,\n    phone: s.phone,\n    phoneMasked: mask(s.phone),\n    idempotencyKey: `${campaignId}|${s.contact_id}`,\n    requestBody,\n    planCounts: counts,\n    alreadyProcessedRows,\n    runId: gate.runId,\n    dryRun\n  }});\n}\n\nif (batch.length === 0) {\n  out.push({ json: {\n    action: 'nothing_to_send',\n    campaign_id: campaignId,\n    planCounts: counts,\n    alreadyProcessedRows,\n    runId: gate.runId,\n    dryRun\n  }});\n}\n\nreturn out;\n"
+      },
+      "id": "542faf87-fd93-4674-ab3b-21a3c620c1dc",
+      "name": "Plan Recipients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a76ca90b-e8d4-54fd-ac9c-d5021a871782",
+              "leftValue": "={{ $('Campaign Gate').first().json.dryRun }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "49258606-be13-42ec-bffb-285b6894d7d8",
+      "name": "Dry Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2096,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DRY RUN REPORT  (Code node, \"Run Once for All Items\")\n// Logs what WOULD happen. No SMS is sent and no Contacts row is changed in a dry run.\n\nconst cfg = $('Workflow Config').first().json;\nconst gate = $('Campaign Gate').first().json;\nconst tz = String(cfg.timezone || 'Asia/Kathmandu');\nconst nowIso = DateTime.now().setZone(tz).toFormat(\"yyyy-LL-dd'T'HH:mm:ssZZ\");\n\nconst items = $input.all().map((i) => i.json);\nconst plan = items[0].planCounts;\nconst sends = items.filter((x) => x.action === 'send');\nconst skipReasons = Object.entries(plan.skipped).map(([k, v]) => `${k}=${v}`).join(', ') || 'none';\nconst intended = sends.map((s) => `${s.contact_id}(${s.phoneMasked})`).join(', ') || 'none';\nconst note = (`DRY RUN - NO SMS SENT. Would send ${sends.length} now (eligible total ${plan.eligible_total}, deferred by cap ${plan.deferred}). ` +\n  `Would mark skipped ${plan.skipped_total} [${skipReasons}]; already processed ${plan.already_processed}. ` +\n  `Message (${gate.messageEncoding}, ${gate.messageSegments} segment(s)): \"${gate.message}\" | Intended: ${intended}`).slice(0, 1800);\n\nreturn [{ json: {\n  dryRunReport: { wouldSend: sends.length, eligibleTotal: plan.eligible_total, skipped: plan.skipped, intended: sends.map((s) => ({ contact_id: s.contact_id, phone: s.phoneMasked })) },\n  runLog: {\n    logged_at: nowIso, run_id: gate.runId, event: 'dry_run', campaign_id: gate.campaignId, dry_run: 'yes',\n    rows_read: plan.rows_read, planned_sends: sends.length, attempted: 0, accepted: 0, failed: 0, unknown: 0,\n    skipped_marked: 0, deferred: plan.deferred, message_encoding: gate.messageEncoding, message_segments: gate.messageSegments, note,\n  },\n} }];\n"
+      },
+      "id": "be644c78-39dc-413e-ac6e-43bf79901547",
+      "name": "Dry Run Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.runLogSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "logged_at": "={{ $json.runLog.logged_at }}",
+            "run_id": "={{ $json.runLog.run_id }}",
+            "event": "={{ $json.runLog.event }}",
+            "campaign_id": "={{ $json.runLog.campaign_id }}",
+            "dry_run": "={{ $json.runLog.dry_run }}",
+            "rows_read": "={{ $json.runLog.rows_read }}",
+            "planned_sends": "={{ $json.runLog.planned_sends }}",
+            "attempted": "={{ $json.runLog.attempted }}",
+            "accepted": "={{ $json.runLog.accepted }}",
+            "failed": "={{ $json.runLog.failed }}",
+            "unknown": "={{ $json.runLog.unknown }}",
+            "skipped_marked": "={{ $json.runLog.skipped_marked }}",
+            "deferred": "={{ $json.runLog.deferred }}",
+            "message_encoding": "={{ $json.runLog.message_encoding }}",
+            "message_segments": "={{ $json.runLog.message_segments }}",
+            "note": "={{ $json.runLog.note }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "logged_at",
+              "displayName": "logged_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "run_id",
+              "displayName": "run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "event",
+              "displayName": "event",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "rows_read",
+              "displayName": "rows_read",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "planned_sends",
+              "displayName": "planned_sends",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "attempted",
+              "displayName": "attempted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "accepted",
+              "displayName": "accepted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "failed",
+              "displayName": "failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "unknown",
+              "displayName": "unknown",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "skipped_marked",
+              "displayName": "skipped_marked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "deferred",
+              "displayName": "deferred",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_encoding",
+              "displayName": "message_encoding",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_segments",
+              "displayName": "message_segments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "c7eec3ae-84b8-48c8-80d2-edde13c0edf6",
+      "name": "Append RunLog - Dry Run",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2576,
+        128
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b218875a-874b-581d-ae9a-0cddd86464ce",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "skip",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "01d0d735-bdd4-5b9b-8f92-fa7f20dbf4ec",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "send",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a50aa3e8-9375-52e2-bb88-9283c994f82f",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "nothing_to_send",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "nothing_to_send"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eea1ee30-cae3-4f32-b1cb-20b916f6b9f6",
+      "name": "Route Plan Items",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2336,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.contactsSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "send_status": "skipped",
+            "error_message": "={{ $json.error_message }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsed": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "contact_id",
+              "displayName": "contact_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "recipient_type",
+              "displayName": "recipient_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "consent",
+              "displayName": "consent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_status",
+              "displayName": "send_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "provider_message_id",
+              "displayName": "provider_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "sent_at",
+              "displayName": "sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "3c203ce0-0e67-4456-8383-f2c071d81a2e",
+      "name": "Mark Skipped Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2576,
+        256
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "89307fd9-b176-4104-a68a-359220f31a11",
+      "name": "Loop Over Recipients",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2576,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.contactsSheetName }}",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "campaign_id",
+              "lookupValue": "={{ $('Workflow Config').first().json.campaignId }}"
+            },
+            {
+              "lookupColumn": "contact_id",
+              "lookupValue": "={{ $('Loop Over Recipients').first().json.contact_id }}"
+            }
+          ]
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "FORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "id": "5f6f0dd5-08ad-4fc9-9b54-14306387d45a",
+      "name": "Re-read Contact Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2816,
+        544
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// GUARD ROW  (Code node, \"Run Once for All Items\")  - compare-and-set check run immediately BEFORE each send.\n// The Contacts row is re-read (filtered by contact_id AND campaign_id). We only proceed if, right now:\n//   - exactly one row exists, - status is still blank/pending, - consent is still \"yes\", - phone still maps to the planned number.\n// This also protects against sheet edits / row shifts since planning, and honours opt-outs made mid-run.\n\nconst cfg = $('Workflow Config').first().json;\nconst planned = $('Loop Over Recipients').first().json;   // current iteration (batch size 1)\nconst str = (v) => String(v ?? '').trim();\nconst nonEmpty = (r) => r && Object.values(r).some((v) => str(v) !== '');\nconst rows = $input.all().map((i) => i.json).filter(nonEmpty);\n\nfunction normalizePhone(raw) {\n  const s = str(typeof raw === 'number' ? String(raw) : raw);\n  if (!s) return { ok: false, code: 'phone_empty' };\n  if (!/^[+\\d\\s().-]+$/.test(s) || s.lastIndexOf('+') > 0) return { ok: false, code: 'phone_invalid_characters' };\n  let digits = s.replace(/\\D/g, '');\n  let intl = s.startsWith('+');\n  if (!intl && s.startsWith('00')) { digits = digits.slice(2); intl = true; }\n  if (!intl) {\n    if (/^977\\d{10}$/.test(digits)) intl = true;                                         // 977XXXXXXXXXX without +\n    else if (cfg.normalizeLocalNepalNumbers !== false && /^9[678]\\d{8}$/.test(digits)) { digits = '977' + digits; intl = true; } // local Nepal mobile\n    else return { ok: false, code: 'phone_missing_country_code' };\n  }\n  if (!/^[1-9]\\d{7,14}$/.test(digits)) return { ok: false, code: 'phone_invalid_length' };\n  if (digits.startsWith('977') && !/^9[678]\\d{8}$/.test(digits.slice(3))) return { ok: false, code: 'phone_nepal_not_mobile' };\n  return { ok: true, e164: '+' + digits };\n}\n\nconst fail = (reason) => [{ json: { eligible: false, send_status: 'skipped', guardReason: reason, contact_id: planned.contact_id, campaign_id: planned.campaign_id } }];\nif (rows.length === 0) return fail('row_not_found_at_send_time');\nif (rows.length > 1) return fail('multiple_rows_at_send_time');\nconst r = rows[0];\nif (str(r.contact_id) !== planned.contact_id || str(r.campaign_id) !== planned.campaign_id) return fail('row_identity_mismatch');\nconst st = str(r.send_status).toLowerCase();\nif (st !== '' && st !== 'pending') return fail('status_changed_to_' + st);\nif (str(r.consent).toLowerCase() !== 'yes') return fail('consent_no_longer_yes');\nconst p = normalizePhone(r.phone);\nif (!p.ok || p.e164 !== planned.phone) return fail('phone_changed_since_planning');\nif (!r.row_number) return fail('row_number_missing');\n\nreturn [{ json: { eligible: true, row_number: r.row_number, contact_id: planned.contact_id, campaign_id: planned.campaign_id,\n  idempotencyKey: planned.idempotencyKey, phoneMasked: planned.phoneMasked } }];\n"
+      },
+      "id": "b85d571d-5c5a-486b-8759-f2407d8654d3",
+      "name": "Guard Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fc743ad5-329a-5849-9396-5748143cac53",
+              "leftValue": "={{ $json.eligible }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f628a887-aac4-444d-b638-90d876175fab",
+      "name": "Row Still Eligible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3264,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.contactsSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "send_status": "processing",
+            "error_message": ""
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsed": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "contact_id",
+              "displayName": "contact_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "recipient_type",
+              "displayName": "recipient_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "consent",
+              "displayName": "consent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_status",
+              "displayName": "send_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "provider_message_id",
+              "displayName": "provider_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "sent_at",
+              "displayName": "sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "10db3abe-3a18-40db-af99-bd9c91a8bf33",
+      "name": "Mark Processing (write-ahead)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3472,
+        544
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Workflow Config').first().json.textbeeBaseUrl + '/gateway/send-sms' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Loop Over Recipients').first().json.requestBody }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "fdc0085d-e0fe-4644-bb58-2a6e15587b52",
+      "name": "Send SMS via TextBee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3712,
+        544
+      ],
+      "retryOnFail": false,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "oSxCKbwMVmbqs4BY",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// CLASSIFY RESPONSE  (Code node, \"Run Once for Each Item\")\n// Turns the raw HTTP result into a per-recipient outcome. Never retries.\n//   accepted : TextBee returned success + smsBatchId  (= queued for the phone, NOT delivery)\n//   failed   : provider definitively refused (401 / 404 / 429) - nothing was sent\n//   unknown  : outcome ambiguous (timeout, network error, 5xx, other 4xx, 200 without batch id)\n//              -> NEVER auto-resent; needs manual review or the reconcile workflow.\n// Any outcome other than \"accepted\" halts the run (fatal) so problems cannot snowball.\n\nconst cfg = $('Workflow Config').first().json;\nconst orig = $('Loop Over Recipients').first().json;      // current iteration (batch size 1)\nconst guard = $('Guard Row').first().json;\nconst j = $json;\nconst tz = String(cfg.timezone || 'Asia/Kathmandu');\n\n// redact anything that looks like a phone number, token or e-mail; truncate\nconst clean = (v) => String(v ?? '')\n  .replace(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g, '[redacted]')\n  .replace(/[A-Za-z0-9_\\-]{32,}/g, '[redacted]')\n  .replace(/\\+?\\d[\\d\\s\\-()]{6,}\\d/g, '[redacted]')\n  .replace(/\\s+/g, ' ').trim().slice(0, 160);\n\nlet send_status = 'unknown'; let provider_message_id = ''; let sent_at = ''; let error_message = '';\nlet fatal = true; let fatalReason = ''; const sc = j.statusCode;\n\nif (typeof sc === 'number') {\n  const body = j.body && typeof j.body === 'object' ? j.body : {};\n  const data = body.data && typeof body.data === 'object' ? body.data : {};\n  const apiMsg = clean(body.message || body.error || data.message || data.error || '');\n  const hasBatch = typeof data.smsBatchId === 'string' && data.smsBatchId.trim() !== '';\n  const queued = (sc === 200 || sc === 201) && data.success === true && hasBatch;\n  const immediate = (sc === 200 || sc === 201) &&\n    (Number.isFinite(Number(data.successCount)) || Number.isFinite(Number(data.failureCount)));\n  if (queued) {\n    send_status = 'accepted';\n    provider_message_id = data.smsBatchId;\n    sent_at = DateTime.now().setZone(tz).toFormat(\"yyyy-LL-dd'T'HH:mm:ssZZ\");\n    error_message = data.warning && data.warning.message ? 'Provider warning: ' + clean(data.warning.message) : '';\n    fatal = false;\n  } else if (immediate && Number(data.successCount) > 0 && Number(data.failureCount || 0) === 0) {\n    send_status = 'accepted';\n    provider_message_id = String(data.smsBatchId || data.messageId || '');\n    sent_at = DateTime.now().setZone(tz).toFormat(\"yyyy-LL-dd'T'HH:mm:ssZZ\");\n    error_message = 'TextBee reports immediate dispatch success; delivery is not confirmed.';\n    fatal = false;\n  } else if (immediate && Number(data.successCount || 0) === 0 && Number(data.failureCount || 0) > 0) {\n    send_status = 'failed';\n    error_message = `TextBee immediate dispatch reported failureCount=${Number(data.failureCount)}; ${apiMsg || 'check provider response'}`;\n    fatalReason = 'TextBee reported no successful dispatch';\n  } else if (sc === 400 || sc === 401 || sc === 404 || sc === 429) {\n    send_status = 'failed';\n    error_message = `HTTP ${sc}: ${apiMsg || 'TextBee rejected the request'}`;\n    fatalReason = `TextBee request rejected (HTTP ${sc})`;\n  } else {\n    send_status = 'unknown';\n    error_message = `HTTP ${sc}: ${apiMsg || 'response does not prove acceptance or failure'} - verify in TextBee before any resend`;\n    fatalReason = `TextBee response ambiguous (HTTP ${sc})`;\n  }\n} else {\n  const raw = j.error && typeof j.error === 'object' ? (j.error.message || j.error.description || '') : (j.error || '');\n  send_status = 'unknown';\n  error_message = `Network/timeout error: ${clean(raw) || 'no response'} - message may already have been queued; verify in TextBee before any resend`;\n  fatalReason = 'Network or timeout error calling TextBee (outcome unknown)';\n}\nreturn { json: {\n  row_number: guard.row_number, contact_id: orig.contact_id, campaign_id: orig.campaign_id, idempotencyKey: orig.idempotencyKey, phoneMasked: orig.phoneMasked,\n  send_status, provider_message_id, sent_at, error_message, httpStatus: typeof sc === 'number' ? sc : 0, fatal, fatalReason,\n} };\n"
+      },
+      "id": "037cf998-b5b8-43f7-9f5f-686b51e447eb",
+      "name": "Classify Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.contactsSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "send_status": "={{ $json.send_status }}",
+            "provider_message_id": "={{ $json.provider_message_id }}",
+            "sent_at": "={{ $json.sent_at }}",
+            "error_message": "={{ $json.error_message }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsed": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "contact_id",
+              "displayName": "contact_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "recipient_type",
+              "displayName": "recipient_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "consent",
+              "displayName": "consent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_status",
+              "displayName": "send_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "provider_message_id",
+              "displayName": "provider_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "sent_at",
+              "displayName": "sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "c3fc5b65-72c8-451d-b3b2-3e4e77e3c25f",
+      "name": "Record Result",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        4192,
+        544
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// RESTORE RESULT ITEM  (Code node, \"Run Once for Each Item\")\n// The Google Sheets update returns the row, not our classification. Re-emit the classification\n// so the loop collects it and downstream nodes see { send_status, fatal, ... }.\nreturn { json: $('Classify Response').first().json };\n"
+      },
+      "id": "14ee50e0-7989-4f09-9530-b501a6f54fa7",
+      "name": "Restore Result Item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4432,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d7c74599-bfa5-5d18-8a99-4d3b7febcda6",
+              "leftValue": "={{ $json.fatal }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "176abd85-16ab-4099-a94c-5712380106d6",
+      "name": "Fatal Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4672,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ 'SMS run halted: ' + $json.fatalReason + '. Campaign left in running state - manual review required before re-approving. Never bulk-reset unknown rows.' }}"
+      },
+      "id": "bf0e0208-fd47-46de-8e77-531fa3a04bc1",
+      "name": "Stop and Error - Send Halted",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        4912,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Workflow Config').first().json.pauseBetweenSendsSeconds }}"
+      },
+      "id": "728cc795-36fc-4bcf-af4b-931cc4710e61",
+      "name": "Pause Between Sends",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4912,
+        448
+      ],
+      "webhookId": "bacc9d26-f754-510b-a5b0-90c247fecff0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// SUMMARIZE RUN  (Code node, \"Run Once for All Items\")  - live runs only\n// Builds the new campaign status and the RunLog row. Counts \"accepted\" = queued by TextBee, NOT delivered.\n\nconst cfg = $('Workflow Config').first().json;\nconst gate = $('Campaign Gate').first().json;\nconst plan = $('Plan Recipients').first().json.planCounts;\nconst tz = String(cfg.timezone || 'Asia/Kathmandu');\nconst nowIso = DateTime.now().setZone(tz).toFormat(\"yyyy-LL-dd'T'HH:mm:ssZZ\");\n\nconst results = $input.all().map((i) => i.json).filter((r) => r && r.send_status);\nconst n = (s) => results.filter((r) => r.send_status === s).length;\nconst accepted = n('accepted'), failed = n('failed'), unknown = n('unknown');\n\nconst remaining = plan.deferred;\nconst newStatus = remaining > 0 ? 'approved' : 'completed';\nconst note = `Run ${gate.runId}: attempted ${results.length}, accepted ${accepted} (queued by TextBee, not proof of delivery), failed ${failed}, unknown ${unknown}, skipped ${plan.skipped_total}, still pending ${remaining}.` +\n  (remaining > 0 ? ' Next scheduled run continues while inside the send window.' : '') +\n  (failed + unknown > 0 ? ' REVIEW failed/unknown rows before any manual reset.' : '');\n\nreturn [{ json: {\n  campaign_id: gate.campaignId, status: newStatus, status_note: note.slice(0, 480), last_run_id: gate.runId, last_run_at: nowIso,\n  runLog: {\n    logged_at: nowIso, run_id: gate.runId, event: 'live_run', campaign_id: gate.campaignId, dry_run: 'no',\n    rows_read: plan.rows_read, planned_sends: plan.to_send_this_run, attempted: results.length, accepted, failed, unknown,\n    skipped_marked: plan.skipped_total, deferred: remaining,\n    message_encoding: gate.messageEncoding, message_segments: gate.messageSegments, note: note.slice(0, 480),\n  },\n} }];\n"
+      },
+      "id": "20500a4d-2bea-42b9-93d4-3379b8aee90b",
+      "name": "Summarize Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2816,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.campaignsSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "campaign_id": "={{ $json.campaign_id }}",
+            "status": "={{ $json.status }}",
+            "status_note": "={{ $json.status_note }}",
+            "last_run_id": "={{ $json.last_run_id }}",
+            "last_run_at": "={{ $json.last_run_at }}"
+          },
+          "matchingColumns": [
+            "campaign_id"
+          ],
+          "schema": [
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true,
+              "removed": false
+            },
+            {
+              "id": "campaign_name",
+              "displayName": "campaign_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "approved_by",
+              "displayName": "approved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_date",
+              "displayName": "send_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "send_time",
+              "displayName": "send_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "school_name",
+              "displayName": "school_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "holiday_start",
+              "displayName": "holiday_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "holiday_end",
+              "displayName": "holiday_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "reopen_date",
+              "displayName": "reopen_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_language",
+              "displayName": "message_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_template_override",
+              "displayName": "message_template_override",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "last_run_id",
+              "displayName": "last_run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "last_run_at",
+              "displayName": "last_run_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "status_note",
+              "displayName": "status_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "b5474719-8ab3-4495-a139-d153d007dd31",
+      "name": "Finalize Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3056,
+        336
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.sheetDocumentId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Workflow Config').first().json.runLogSheetName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "logged_at": "={{ $('Summarize Run').first().json.runLog.logged_at }}",
+            "run_id": "={{ $('Summarize Run').first().json.runLog.run_id }}",
+            "event": "={{ $('Summarize Run').first().json.runLog.event }}",
+            "campaign_id": "={{ $('Summarize Run').first().json.runLog.campaign_id }}",
+            "dry_run": "={{ $('Summarize Run').first().json.runLog.dry_run }}",
+            "rows_read": "={{ $('Summarize Run').first().json.runLog.rows_read }}",
+            "planned_sends": "={{ $('Summarize Run').first().json.runLog.planned_sends }}",
+            "attempted": "={{ $('Summarize Run').first().json.runLog.attempted }}",
+            "accepted": "={{ $('Summarize Run').first().json.runLog.accepted }}",
+            "failed": "={{ $('Summarize Run').first().json.runLog.failed }}",
+            "unknown": "={{ $('Summarize Run').first().json.runLog.unknown }}",
+            "skipped_marked": "={{ $('Summarize Run').first().json.runLog.skipped_marked }}",
+            "deferred": "={{ $('Summarize Run').first().json.runLog.deferred }}",
+            "message_encoding": "={{ $('Summarize Run').first().json.runLog.message_encoding }}",
+            "message_segments": "={{ $('Summarize Run').first().json.runLog.message_segments }}",
+            "note": "={{ $('Summarize Run').first().json.runLog.note }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "logged_at",
+              "displayName": "logged_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "run_id",
+              "displayName": "run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "event",
+              "displayName": "event",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "rows_read",
+              "displayName": "rows_read",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "planned_sends",
+              "displayName": "planned_sends",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "attempted",
+              "displayName": "attempted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "accepted",
+              "displayName": "accepted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "failed",
+              "displayName": "failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "unknown",
+              "displayName": "unknown",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "skipped_marked",
+              "displayName": "skipped_marked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "deferred",
+              "displayName": "deferred",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_encoding",
+              "displayName": "message_encoding",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "message_segments",
+              "displayName": "message_segments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "8bd1eeca-5fd3-48f4-898b-34141fd9ce59",
+      "name": "Append RunLog - Live Run",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3296,
+        336
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMywyrqeWxsfoBkc",
+          "name": "Google Sheets account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Config": {
+      "main": [
+        [
+          {
+            "node": "Read Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Campaign": {
+      "main": [
+        [
+          {
+            "node": "Campaign Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campaign Gate": {
+      "main": [
+        [
+          {
+            "node": "Gate Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Open?": {
+      "main": [
+        [
+          {
+            "node": "Lock Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Needs Attention?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Attention?": {
+      "main": [
+        [
+          {
+            "node": "Flag Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gate Closed - nothing to do",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Campaign": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error - Gate Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock Campaign": {
+      "main": [
+        [
+          {
+            "node": "Verify Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Lock": {
+      "main": [
+        [
+          {
+            "node": "Read Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Contacts": {
+      "main": [
+        [
+          {
+            "node": "Plan Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Recipients": {
+      "main": [
+        [
+          {
+            "node": "Dry Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry Run?": {
+      "main": [
+        [
+          {
+            "node": "Dry Run Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Plan Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry Run Report": {
+      "main": [
+        [
+          {
+            "node": "Append RunLog - Dry Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Plan Items": {
+      "main": [
+        [
+          {
+            "node": "Mark Skipped Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Recipients": {
+      "main": [
+        [
+          {
+            "node": "Summarize Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Re-read Contact Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-read Contact Row": {
+      "main": [
+        [
+          {
+            "node": "Guard Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Row": {
+      "main": [
+        [
+          {
+            "node": "Row Still Eligible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Row Still Eligible?": {
+      "main": [
+        [
+          {
+            "node": "Mark Processing (write-ahead)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Processing (write-ahead)": {
+      "main": [
+        [
+          {
+            "node": "Send SMS via TextBee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS via TextBee": {
+      "main": [
+        [
+          {
+            "node": "Classify Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Response": {
+      "main": [
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Result": {
+      "main": [
+        [
+          {
+            "node": "Restore Result Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Result Item": {
+      "main": [
+        [
+          {
+            "node": "Fatal Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fatal Error?": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error - Send Halted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pause Between Sends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Between Sends": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Run": {
+      "main": [
+        [
+          {
+            "node": "Finalize Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Campaign": {
+      "main": [
+        [
+          {
+            "node": "Append RunLog - Live Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (every minute)": {
+      "main": [
+        [
+          {
+            "node": "Workflow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "773adb04-2f4b-46ee-bed7-912f20d45161",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7211f88979ea5d7acea8ba2ca5896b39393aaa128d813899662a62355b672b3f"
+  },
+  "nodeGroups": [],
+  "id": "RU21VYnlSivc2Uov",
+  "tags": []
+}
